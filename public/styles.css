@@ -39,3 +39,29 @@ p { margin: 4px 0 0 0; font-size: 13px }
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* Spawn UI styles */
+#spawn-ui {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%,-50%);
+  z-index: 40;
+}
+
+.spawn-panel {
+  background: rgba(255,255,255,0.95);
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  min-width: 220px;
+}
+.spawn-title { font-weight: 600; margin-bottom: 8px }
+.spawn-list { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap }
+.spawn-option { padding: 6px 8px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer }
+.spawn-option.active { background: #0066ff; color: #fff; border-color: #0050d4 }
+.spawn-actions { text-align: right }
+#spawn-confirm { padding: 6px 10px; border-radius: 6px; background: #0066ff; color: #fff; border: none; cursor: pointer }
+
+#respawn-btn { margin-top: 8px; padding: 6px 10px; border-radius: 6px; border: none; background: #222; color: #fff; cursor: pointer }
+

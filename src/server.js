@@ -54,6 +54,17 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('player:update', { id: socket.id, position: data.position });
   });
 
+  // allow respawn requests: choose a spawn point and teleport player
+  socket.on('player:respawn', ({ spawnIndex } = {}) => {
+    if (!players[socket.id]) return;
+    const pos = chooseSpawn(spawnIndex);
+    players[socket.id].position = pos;
+    // notify the respawning client of its new state
+    socket.emit('player:joined:you', { id: socket.id, state: players[socket.id] });
+    // notify others about the position change
+    socket.broadcast.emit('player:update', { id: socket.id, position: pos });
+  });
+
   socket.on('disconnect', () => {
     console.log('socket disconnected', socket.id);
     delete players[socket.id];

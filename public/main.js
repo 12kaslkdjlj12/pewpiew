@@ -60,10 +60,68 @@
   // local player name and join
   const localName = (window.prompt && prompt('Enter your player name', 'Player')) || `Player_${Math.random().toString(36).slice(2,6)}`;
 
+  // Spawn selection UI state
+  let selectedSpawn = null; // null = random
+
+  function createSpawnUI() {
+    const container = document.createElement('div');
+    container.id = 'spawn-ui';
+    container.innerHTML = `
+      <div class="spawn-panel">
+        <div class="spawn-title">Choose spawn</div>
+        <div class="spawn-list"></div>
+        <div class="spawn-actions">
+          <button id="spawn-confirm">Spawn</button>
+        </div>
+      </div>`;
+    document.body.appendChild(container);
+
+    const list = container.querySelector('.spawn-list');
+    // create 5 spawn options (match server spawnPoints length)
+    for (let i = 0; i < 5; i++) {
+      const b = document.createElement('button');
+      b.className = 'spawn-option';
+      b.textContent = `Spawn ${i + 1}`;
+      b.dataset.index = i;
+      b.addEventListener('click', () => {
+        selectedSpawn = i;
+        // highlight
+        container.querySelectorAll('.spawn-option').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+      list.appendChild(b);
+    }
+
+    container.querySelector('#spawn-confirm').addEventListener('click', () => {
+      // if socket connected, send join/respawn
+      if (socket && socket.connected) {
+        // if not yet joined, send join; otherwise request respawn
+        socket.emit('player:respawn', { spawnIndex: selectedSpawn });
+        // hide the spawn UI after choosing
+        container.style.display = 'none';
+      }
+    });
+
+    return container;
+  }
+
+  const spawnUI = createSpawnUI();
+
+  // add a small respawn button to UI
+  const respawnBtn = document.createElement('button');
+  respawnBtn.id = 'respawn-btn';
+  respawnBtn.textContent = 'Respawn';
+  respawnBtn.addEventListener('click', () => {
+    // show spawn UI so user can pick a spawn
+    spawnUI.style.display = 'block';
+  });
+  document.getElementById('ui').appendChild(respawnBtn);
+
   if (socket) {
     socket.on('connect', () => {
       console.log('connected to server', socket.id);
-      socket.emit('player:join', { name: localName });
+      // send join request with chosen spawn if any (null => random)
+      socket.emit('player:join', { name: localName, spawnIndex: selectedSpawn });
     });
 
     socket.on('players:init', (all) => {
