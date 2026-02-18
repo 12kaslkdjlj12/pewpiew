@@ -46,13 +46,15 @@
   }
 
   function createRemotePlayer(id, state) {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x5555ff });
+    const colorHex = state.color ? state.color : '#5555ff';
+    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(colorHex) });
     const mesh = new THREE.Mesh(geometry.clone(), mat);
     mesh.position.set(state.position.x, state.position.y, state.position.z);
     scene.add(mesh);
     const target = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
     const name = state.name || `Player_${id.slice(0,4)}`;
     const labelEl = createLabel(name);
+    if (state.color) labelEl.style.background = state.color;
     remotePlayers[id] = { mesh, target, labelEl, name };
     return remotePlayers[id];
   }
@@ -70,6 +72,7 @@
       <div class="spawn-panel">
         <div class="spawn-title">Choose spawn</div>
         <div class="spawn-list"></div>
+        <div style="margin:8px 0">Color: <input id="spawn-color" type="color" value="#ff5555"></div>
         <div class="spawn-actions">
           <button id="spawn-confirm">Spawn</button>
         </div>
@@ -94,9 +97,11 @@
 
     container.querySelector('#spawn-confirm').addEventListener('click', () => {
       // if socket connected, send join/respawn
+      const colorInput = container.querySelector('#spawn-color');
+      const color = colorInput ? colorInput.value : null;
       if (socket && socket.connected) {
         // if not yet joined, send join; otherwise request respawn
-        socket.emit('player:respawn', { spawnIndex: selectedSpawn });
+        socket.emit('player:respawn', { spawnIndex: selectedSpawn, color });
         // hide the spawn UI after choosing
         container.style.display = 'none';
       }
@@ -118,10 +123,12 @@
   document.getElementById('ui').appendChild(respawnBtn);
 
   if (socket) {
+    // ensure we send color on initial join
     socket.on('connect', () => {
       console.log('connected to server', socket.id);
-      // send join request with chosen spawn if any (null => random)
-      socket.emit('player:join', { name: localName, spawnIndex: selectedSpawn });
+      const colorInput = document.querySelector('#spawn-color');
+      const color = colorInput ? colorInput.value : null;
+      socket.emit('player:join', { name: localName, spawnIndex: selectedSpawn, color });
     });
 
     socket.on('players:init', (all) => {
@@ -140,13 +147,28 @@
     socket.on('player:joined:you', ({ id, state }) => {
       // set local player position to assigned spawn
       player.position.set(state.position.x, state.position.y, state.position.z);
+      // set local player color
+      if (state.color) player.material.color.set(state.color);
       // create local label
       const label = createLabel(state.name || localName);
+      if (state.color) label.style.background = state.color;
       // attach local label to a simple local record
       remotePlayers[id] = remotePlayers[id] || {};
       remotePlayers[id].local = true;
       remotePlayers[id].labelEl = label;
       remotePlayers[id].name = state.name || localName;
+      remotePlayers[id].color = state.color;
+    });
+
+    // receive meta updates (like color change)
+    socket.on('player:meta', ({ id, meta }) => {
+      const rec = remotePlayers[id];
+      if (!rec) return;
+      if (meta.color) {
+        rec.color = meta.color;
+        if (rec.mesh) rec.mesh.material.color.set(meta.color);
+        if (rec.labelEl) rec.labelEl.style.background = meta.color;
+      }
     });
 
     socket.on('player:update', ({ id, position }) => {

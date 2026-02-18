@@ -39,9 +39,18 @@ io.on('connection', (socket) => {
   socket.emit('players:init', players);
 
   // allow client to send join info (name & optional spawn)
-  socket.on('player:join', ({ name, spawnIndex } = {}) => {
-    const pos = chooseSpawn(spawnIndex);
-    players[socket.id] = { position: pos, name: name || `Player_${socket.id.slice(0,4)}` };
+  socket.on('player:join', ({ name, spawnIndex, color } = {}) => {
+    // validate spawn index
+    let chosenIndex = null;
+    if (typeof spawnIndex === 'number' && spawnIndex >= 0 && spawnIndex < spawnPoints.length) chosenIndex = spawnIndex;
+    const pos = chooseSpawn(chosenIndex);
+    // validate color (simple hex check) or assign random
+    let finalColor = '#'+Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
+    if (typeof color === 'string' && /^#?[0-9a-fA-F]{6}$/.test(color)) {
+      finalColor = color.startsWith('#') ? color : `#${color}`;
+    }
+
+    players[socket.id] = { position: pos, name: name || `Player_${socket.id.slice(0,4)}`, color: finalColor };
     // inform all others
     socket.broadcast.emit('player:joined', { id: socket.id, state: players[socket.id] });
     // confirm join to the joining client (in case it wants to read assigned spawn)
@@ -55,14 +64,23 @@ io.on('connection', (socket) => {
   });
 
   // allow respawn requests: choose a spawn point and teleport player
-  socket.on('player:respawn', ({ spawnIndex } = {}) => {
+  socket.on('player:respawn', ({ spawnIndex, color } = {}) => {
     if (!players[socket.id]) return;
-    const pos = chooseSpawn(spawnIndex);
+    // validate spawn index
+    let chosenIndex = null;
+    if (typeof spawnIndex === 'number' && spawnIndex >= 0 && spawnIndex < spawnPoints.length) chosenIndex = spawnIndex;
+    const pos = chooseSpawn(chosenIndex);
     players[socket.id].position = pos;
+    // allow changing color on respawn
+    if (typeof color === 'string' && /^#?[0-9a-fA-F]{6}$/.test(color)) {
+      players[socket.id].color = color.startsWith('#') ? color : `#${color}`;
+    }
     // notify the respawning client of its new state
     socket.emit('player:joined:you', { id: socket.id, state: players[socket.id] });
     // notify others about the position change
     socket.broadcast.emit('player:update', { id: socket.id, position: pos });
+    // also notify others about color change if any
+    socket.broadcast.emit('player:meta', { id: socket.id, meta: { color: players[socket.id].color } });
   });
 
   socket.on('disconnect', () => {
