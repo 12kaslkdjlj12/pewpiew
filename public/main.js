@@ -28,22 +28,42 @@
   player.position.y = 0.5;
   scene.add(player);
 
-  // Networking
+  // Networking + remote player smoothing/labels
   const socket = window.io ? window.io() : null;
-  const remotePlayers = {};
+  const remotePlayers = {}; // id -> { mesh, target: Vector3, labelEl, name }
+
+  // overlay for name labels
+  const labelsContainer = document.createElement('div');
+  labelsContainer.id = 'labels';
+  document.body.appendChild(labelsContainer);
+
+  function createLabel(text) {
+    const el = document.createElement('div');
+    el.className = 'player-label';
+    el.textContent = text;
+    labelsContainer.appendChild(el);
+    return el;
+  }
 
   function createRemotePlayer(id, state) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x5555ff });
     const mesh = new THREE.Mesh(geometry.clone(), mat);
     mesh.position.set(state.position.x, state.position.y, state.position.z);
     scene.add(mesh);
-    remotePlayers[id] = mesh;
-    return mesh;
+    const target = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
+    const name = state.name || `Player_${id.slice(0,4)}`;
+    const labelEl = createLabel(name);
+    remotePlayers[id] = { mesh, target, labelEl, name };
+    return remotePlayers[id];
   }
+
+  // local player name and join
+  const localName = (window.prompt && prompt('Enter your player name', 'Player')) || `Player_${Math.random().toString(36).slice(2,6)}`;
 
   if (socket) {
     socket.on('connect', () => {
       console.log('connected to server', socket.id);
+      socket.emit('player:join', { name: localName });
     });
 
     socket.on('players:init', (all) => {
@@ -58,16 +78,30 @@
       createRemotePlayer(id, state);
     });
 
+    // server confirms our assigned spawn/name
+    socket.on('player:joined:you', ({ id, state }) => {
+      // set local player position to assigned spawn
+      player.position.set(state.position.x, state.position.y, state.position.z);
+      // create local label
+      const label = createLabel(state.name || localName);
+      // attach local label to a simple local record
+      remotePlayers[id] = remotePlayers[id] || {};
+      remotePlayers[id].local = true;
+      remotePlayers[id].labelEl = label;
+      remotePlayers[id].name = state.name || localName;
+    });
+
     socket.on('player:update', ({ id, position }) => {
       if (id === socket.id) return;
-      const mesh = remotePlayers[id] || createRemotePlayer(id, { position });
-      mesh.position.set(position.x, position.y, position.z);
+      const rec = remotePlayers[id] || createRemotePlayer(id, { position, name: `Player_${id.slice(0,4)}` });
+      rec.target.set(position.x, position.y, position.z);
     });
 
     socket.on('player:remove', ({ id }) => {
-      const mesh = remotePlayers[id];
-      if (mesh) {
-        scene.remove(mesh);
+      const rec = remotePlayers[id];
+      if (rec) {
+        if (rec.mesh) scene.remove(rec.mesh);
+        if (rec.labelEl && rec.labelEl.parentNode) rec.labelEl.parentNode.removeChild(rec.labelEl);
         delete remotePlayers[id];
       }
     });
@@ -110,10 +144,32 @@
     step(dt);
     updateCamera();
 
-    // send position updates at ~10Hz
-    if (socket && now % 100 < 16) {
-      socket.emit('player:update', { position: player.position });
-    }
+      // send position updates at 10Hz (every 100ms)
+      // use a simple timer based on lastSent
+      if (socket) {
+        if (!socket._lastSent || now - socket._lastSent > 90) {
+          socket.emit('player:update', { position: { x: player.position.x, y: player.position.y, z: player.position.z } });
+          socket._lastSent = now;
+        }
+      }
+
+      // smooth remote players toward target positions
+      Object.keys(remotePlayers).forEach((id) => {
+        const rec = remotePlayers[id];
+        if (!rec.mesh || !rec.target) return;
+        // lerp towards target
+        rec.mesh.position.lerp(rec.target, 0.18);
+        // update label position
+        if (rec.labelEl) {
+          const pos = rec.mesh.position.clone();
+          pos.y += 1.2;
+          pos.project(camera);
+          const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+          const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+          rec.labelEl.style.transform = `translate(-50%,-100%) translate(${x}px,${y}px)`;
+          rec.labelEl.style.display = pos.z > 1 || pos.z < -1 ? 'none' : 'block';
+        }
+      });
 
     // update remote players (interpolation could go here)
     renderer.render(scene, camera);
