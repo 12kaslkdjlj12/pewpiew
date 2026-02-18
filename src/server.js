@@ -27,6 +27,12 @@ const spawnPoints = [
   { x: 0, y: 0.5, z: -4 }
 ];
 
+// Simple objectives (for minimap markers)
+const objectives = [
+  { id: 'flag1', x: 8, y: 0.5, z: 8, name: 'Flag A' },
+  { id: 'flag2', x: -8, y: 0.5, z: -6, name: 'Flag B' }
+];
+
 function chooseSpawn(index) {
   if (typeof index === 'number' && spawnPoints[index]) return spawnPoints[index];
   return spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
@@ -35,7 +41,8 @@ function chooseSpawn(index) {
 io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
-  // send existing players to the new client
+  // send map data (spawn points, objectives) and existing players to the new client
+  socket.emit('map:data', { spawnPoints, objectives });
   socket.emit('players:init', players);
 
   // allow client to send join info (name & optional spawn)

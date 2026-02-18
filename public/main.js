@@ -45,6 +45,9 @@
   document.body.appendChild(minimap);
   const minimapCtx = minimap.getContext('2d');
 
+  // map data from server
+  const mapData = { spawnPoints: [], objectives: [] };
+
   function createLabel(text) {
     const el = document.createElement('div');
     el.className = 'player-label';
@@ -144,6 +147,12 @@
         if (id === socket.id) return;
         createRemotePlayer(id, all[id]);
       });
+    });
+
+    socket.on('map:data', (data) => {
+      if (!data) return;
+      mapData.spawnPoints = data.spawnPoints || [];
+      mapData.objectives = data.objectives || [];
     });
 
     socket.on('player:joined', ({ id, state }) => {
@@ -317,6 +326,39 @@
         minimapCtx.lineWidth = 2;
         minimapCtx.strokeRect(0, 0, size, size);
       }
+
+      // draw spawn points
+      mapData.spawnPoints.forEach((s, idx) => {
+        const px = (s.x - (cx - half)) * scale;
+        const pz = (s.z - (cz - half)) * scale;
+        if (px < 0 || px > size || pz < 0 || pz > size) return;
+        minimapCtx.fillStyle = '#00ff66';
+        minimapCtx.beginPath();
+        minimapCtx.moveTo(px, pz - 6);
+        minimapCtx.lineTo(px - 6, pz + 6);
+        minimapCtx.lineTo(px + 6, pz + 6);
+        minimapCtx.closePath();
+        minimapCtx.fill();
+        // small index label
+        minimapCtx.fillStyle = 'rgba(0,0,0,0.7)';
+        minimapCtx.font = '10px sans-serif';
+        minimapCtx.fillText(String(idx + 1), px - 3, pz + 4);
+      });
+
+      // draw objectives
+      mapData.objectives.forEach((o) => {
+        const px = (o.x - (cx - half)) * scale;
+        const pz = (o.z - (cz - half)) * scale;
+        if (px < 0 || px > size || pz < 0 || pz > size) return;
+        minimapCtx.fillStyle = '#ff4444';
+        minimapCtx.beginPath();
+        minimapCtx.rect(px - 5, pz - 5, 10, 10);
+        minimapCtx.fill();
+        // objective initial
+        minimapCtx.fillStyle = 'white';
+        minimapCtx.font = '9px sans-serif';
+        minimapCtx.fillText((o.name || 'O').charAt(0), px - 3, pz + 3);
+      });
 
     // update remote players (interpolation could go here)
     renderer.render(scene, camera);

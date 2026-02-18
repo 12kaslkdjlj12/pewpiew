@@ -81,3 +81,15 @@ p { margin: 4px 0 0 0; font-size: 13px }
   box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
 
+#minimap + .minimap-legend {
+  position: absolute;
+  right: 12px;
+  top: 168px;
+  width: 150px;
+  font-size: 11px;
+  color: #fff;
+  text-align: left;
+  z-index: 30;
+  pointer-events: none;
+}
+
