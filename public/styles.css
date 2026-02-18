@@ -68,3 +68,16 @@ p { margin: 4px 0 0 0; font-size: 13px }
 /* color input style */
 #spawn-color { vertical-align: middle; width: 44px; height: 28px; border: none; padding: 0 }
 
+/* Minimap */
+#minimap {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 150px;
+  height: 150px;
+  border-radius: 6px;
+  image-rendering: pixelated;
+  z-index: 30;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+

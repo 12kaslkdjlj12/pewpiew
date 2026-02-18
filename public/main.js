@@ -37,6 +37,14 @@
   labelsContainer.id = 'labels';
   document.body.appendChild(labelsContainer);
 
+  // minimap canvas
+  const minimap = document.createElement('canvas');
+  minimap.id = 'minimap';
+  minimap.width = 200;
+  minimap.height = 200;
+  document.body.appendChild(minimap);
+  const minimapCtx = minimap.getContext('2d');
+
   function createLabel(text) {
     const el = document.createElement('div');
     el.className = 'player-label';
@@ -250,6 +258,65 @@
           rec.labelEl.style.display = pos.z > 1 || pos.z < -1 ? 'none' : 'block';
         }
       });
+
+      // Draw minimap (top-right)
+      if (minimapCtx) {
+        const size = Math.min(minimap.width, minimap.height);
+        // clear
+        minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
+        // background
+        minimapCtx.fillStyle = 'rgba(0,0,0,0.6)';
+        minimapCtx.fillRect(0, 0, minimap.width, minimap.height);
+        // settings: show area around local player
+        const viewSize = 30; // world units across
+        const half = viewSize / 2;
+        const scale = size / viewSize;
+        // center on local player
+        const cx = player.position.x;
+        const cz = player.position.z;
+
+        // draw grid
+        minimapCtx.strokeStyle = 'rgba(255,255,255,0.06)';
+        minimapCtx.lineWidth = 1;
+        for (let g = -half; g <= half; g += 5) {
+          const gx = (g + half) * scale;
+          minimapCtx.beginPath();
+          minimapCtx.moveTo(gx, 0);
+          minimapCtx.lineTo(gx, size);
+          minimapCtx.stroke();
+          minimapCtx.beginPath();
+          minimapCtx.moveTo(0, gx);
+          minimapCtx.lineTo(size, gx);
+          minimapCtx.stroke();
+        }
+
+        // draw players
+        Object.keys(remotePlayers).forEach((id) => {
+          const rec = remotePlayers[id];
+          if (!rec) return;
+          const px = (rec.mesh.position.x - (cx - half)) * scale;
+          const pz = (rec.mesh.position.z - (cz - half)) * scale;
+          // skip if outside
+          if (px < 0 || px > size || pz < 0 || pz > size) return;
+          minimapCtx.beginPath();
+          minimapCtx.fillStyle = rec.color || '#55f';
+          minimapCtx.arc(px, pz, id === (socket && socket.id) ? 5 : 4, 0, Math.PI * 2);
+          minimapCtx.fill();
+        });
+
+        // draw local player in center indicator
+        const localX = (player.position.x - (cx - half)) * scale;
+        const localZ = (player.position.z - (cz - half)) * scale;
+        minimapCtx.beginPath();
+        minimapCtx.fillStyle = '#ff5';
+        minimapCtx.arc(localX, localZ, 6, 0, Math.PI * 2);
+        minimapCtx.fill();
+
+        // border
+        minimapCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+        minimapCtx.lineWidth = 2;
+        minimapCtx.strokeRect(0, 0, size, size);
+      }
 
     // update remote players (interpolation could go here)
     renderer.render(scene, camera);
