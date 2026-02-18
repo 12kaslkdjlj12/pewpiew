@@ -78,7 +78,10 @@
   spawnConfirm.querySelector('#spawn-confirm-no').addEventListener('click', hideSpawnConfirm);
   spawnConfirm.querySelector('#spawn-confirm-yes').addEventListener('click', () => {
     const idx = spawnConfirm._pending;
-    if (idx != null && socket && socket.connected) socket.emit('player:respawn', { spawnIndex: idx });
+    if (idx != null && socket && socket.connected) {
+      nextRespawnAvailable = Date.now() + respawnCooldownMs;
+      socket.emit('player:respawn', { spawnIndex: idx });
+    }
     hideSpawnConfirm();
   });
 
@@ -90,6 +93,12 @@
     <div class="legend-item"><div class="legend-swatch" style="background:#ff4444"></div><div class="legend-label">Objectives</div></div>
     <div class="hint">Click a spawn on the minimap to respawn there.</div>`;
   document.body.appendChild(legend);
+
+  // tooltip for spawn names
+  const minimapTooltip = document.createElement('div');
+  minimapTooltip.id = 'minimap-tooltip';
+  minimapTooltip.style.display = 'none';
+  document.body.appendChild(minimapTooltip);
 
   function createLabel(text) {
     const el = document.createElement('div');
@@ -176,6 +185,16 @@
   });
   document.getElementById('ui').appendChild(respawnBtn);
 
+  // respawn cooldown UI (progress bar)
+  const respawnCooldownEl = document.createElement('div');
+  respawnCooldownEl.id = 'respawn-cooldown';
+  respawnCooldownEl.innerHTML = `<div class="bar"><div class="fill"></div></div><div class="text"></div>`;
+  document.getElementById('ui').appendChild(respawnCooldownEl);
+
+  // cooldown tracking
+  let respawnCooldownMs = 5000; // default, will be overridden by server map:data
+  let nextRespawnAvailable = 0;
+
   if (socket) {
     // ensure we send color on initial join
     socket.on('connect', () => {
@@ -196,6 +215,7 @@
       if (!data) return;
       mapData.spawnPoints = data.spawnPoints || [];
       mapData.objectives = data.objectives || [];
+      if (typeof data.respawnCooldownMs === 'number') respawnCooldownMs = data.respawnCooldownMs;
     });
 
     socket.on('player:joined', ({ id, state }) => {
@@ -218,6 +238,10 @@
       remotePlayers[id].labelEl = label;
       remotePlayers[id].name = state.name || localName;
       remotePlayers[id].color = state.color;
+      // set respawn availability if server provided lastRespawn
+      if (state.lastRespawn) {
+        nextRespawnAvailable = state.lastRespawn + respawnCooldownMs;
+      }
     });
 
     // receive meta updates (like color change)
@@ -243,6 +267,21 @@
         if (rec.mesh) scene.remove(rec.mesh);
         if (rec.labelEl && rec.labelEl.parentNode) rec.labelEl.parentNode.removeChild(rec.labelEl);
         delete remotePlayers[id];
+      }
+    });
+
+    socket.on('player:respawn:denied', ({ remaining }) => {
+      // show denial message in the spawn confirm panel if visible, otherwise briefly show it
+      const textEl = spawnConfirm.querySelector('.spawn-confirm-text');
+      if (textEl) {
+        textEl.textContent = `Respawn denied. Wait ${remaining}s.`;
+        // set next available from server response
+        nextRespawnAvailable = Date.now() + remaining * 1000;
+        // auto-hide after a short delay
+        setTimeout(() => { if (spawnConfirm._pending == null) hideSpawnConfirm(); }, 1500);
+      } else {
+        nextRespawnAvailable = Date.now() + remaining * 1000;
+        alert(`Respawn denied. Wait ${remaining}s.`);
       }
     });
   }
@@ -342,6 +381,55 @@
           minimapCtx.stroke();
         }
 
+        // draw spawn points
+        mapData.spawnPoints.forEach((s, idx) => {
+          const px = (s.x - (cx - half)) * scale;
+          const pz = (s.z - (cz - half)) * scale;
+          if (px < 0 || px > size || pz < 0 || pz > size) return;
+          // highlight if hovered
+          const isHover = hoveredSpawn === idx;
+          minimapCtx.fillStyle = isHover ? '#99ffbb' : '#00ff66';
+          minimapCtx.beginPath();
+          const sizeTri = isHover ? 9 : 6;
+          minimapCtx.moveTo(px, pz - sizeTri);
+          minimapCtx.lineTo(px - sizeTri, pz + sizeTri);
+          minimapCtx.lineTo(px + sizeTri, pz + sizeTri);
+          minimapCtx.closePath();
+          minimapCtx.fill();
+          if (isHover) {
+            minimapCtx.strokeStyle = 'rgba(0,0,0,0.5)'; minimapCtx.lineWidth = 2; minimapCtx.stroke();
+          }
+          // small index label
+          minimapCtx.fillStyle = 'rgba(0,0,0,0.7)';
+          minimapCtx.font = '10px sans-serif';
+          minimapCtx.fillText(String(idx + 1), px - 3, pz + 4);
+          // tooltip positioning when hovered
+          if (isHover && minimapTooltip) {
+            minimapTooltip.textContent = s.name || `Spawn ${idx + 1}`;
+            minimapTooltip.style.display = 'block';
+            const rect = minimap.getBoundingClientRect();
+            const tx = rect.left + px;
+            const ty = rect.top + pz - 14;
+            minimapTooltip.style.left = `${tx}px`;
+            minimapTooltip.style.top = `${ty}px`;
+          }
+        });
+
+        // draw objectives
+        mapData.objectives.forEach((o) => {
+          const px = (o.x - (cx - half)) * scale;
+          const pz = (o.z - (cz - half)) * scale;
+          if (px < 0 || px > size || pz < 0 || pz > size) return;
+          minimapCtx.fillStyle = '#ff4444';
+          minimapCtx.beginPath();
+          minimapCtx.rect(px - 5, pz - 5, 10, 10);
+          minimapCtx.fill();
+          // objective initial
+          minimapCtx.fillStyle = 'white';
+          minimapCtx.font = '9px sans-serif';
+          minimapCtx.fillText((o.name || 'O').charAt(0), px - 3, pz + 3);
+        });
+
         // draw players
         Object.keys(remotePlayers).forEach((id) => {
           const rec = remotePlayers[id];
@@ -368,6 +456,23 @@
         minimapCtx.strokeStyle = 'rgba(255,255,255,0.3)';
         minimapCtx.lineWidth = 2;
         minimapCtx.strokeRect(0, 0, size, size);
+        // hide tooltip when not hovering a spawn
+        if (!hoveredSpawn && minimapTooltip) minimapTooltip.style.display = 'none';
+        // update respawn cooldown UI
+        const nowMs = Date.now();
+        const remaining = Math.max(0, nextRespawnAvailable - nowMs);
+        const pct = respawnCooldownMs > 0 ? (1 - remaining / respawnCooldownMs) : 1;
+        const fill = respawnCooldownEl.querySelector('.fill');
+        const text = respawnCooldownEl.querySelector('.text');
+        if (remaining > 0) {
+          fill.style.width = `${Math.max(6, Math.round(pct * 100))}%`;
+          text.textContent = `Cooldown: ${Math.ceil(remaining/1000)}s`;
+          respawnBtn.disabled = true;
+        } else {
+          fill.style.width = `0%`;
+          text.textContent = '';
+          respawnBtn.disabled = false;
+        }
       }
 
       // end animate loop actions
@@ -424,6 +529,25 @@
     });
 
     minimap.addEventListener('mouseleave', () => { hoveredSpawn = null; });
+
+    // keyboard shortcuts: 'r' to quick respawn at hovered spawn, Enter to confirm when dialog is open, Escape to cancel
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'r' || e.key === 'R') {
+        if (hoveredSpawn != null && socket && socket.connected) {
+          // optimistic UI: set next available, server will correct if denied
+          nextRespawnAvailable = Date.now() + respawnCooldownMs;
+          socket.emit('player:respawn', { spawnIndex: hoveredSpawn });
+        }
+      }
+      if (e.key === 'Enter') {
+        if (spawnConfirm._pending != null) {
+          spawnConfirm.querySelector('#spawn-confirm-yes').click();
+        }
+      }
+      if (e.key === 'Escape') {
+        hideSpawnConfirm();
+      }
+    });
       // end animate loop actions
 
       // draw spawn points

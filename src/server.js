@@ -27,6 +27,9 @@ const spawnPoints = [
   { x: 0, y: 0.5, z: -4 }
 ];
 
+// respawn cooldown (ms) advertised to clients
+const RESPAWN_COOLDOWN_MS = 5000; // 5s cooldown between respawns per player
+
 // Simple objectives (for minimap markers)
 const objectives = [
   { id: 'flag1', x: 8, y: 0.5, z: 8, name: 'Flag A' },
@@ -42,7 +45,7 @@ io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
   // send map data (spawn points, objectives) and existing players to the new client
-  socket.emit('map:data', { spawnPoints, objectives });
+  socket.emit('map:data', { spawnPoints, objectives, respawnCooldownMs: RESPAWN_COOLDOWN_MS });
   socket.emit('players:init', players);
 
   // allow client to send join info (name & optional spawn)
@@ -73,6 +76,15 @@ io.on('connection', (socket) => {
   // allow respawn requests: choose a spawn point and teleport player
   socket.on('player:respawn', ({ spawnIndex, color } = {}) => {
     if (!players[socket.id]) return;
+    const now = Date.now();
+    players[socket.id].lastRespawn = players[socket.id].lastRespawn || 0;
+    const elapsed = now - players[socket.id].lastRespawn;
+    if (elapsed < RESPAWN_COOLDOWN_MS) {
+      const remaining = Math.ceil((RESPAWN_COOLDOWN_MS - elapsed) / 1000);
+      socket.emit('player:respawn:denied', { remaining });
+      return;
+    }
+
     // validate spawn index
     let chosenIndex = null;
     if (typeof spawnIndex === 'number' && spawnIndex >= 0 && spawnIndex < spawnPoints.length) chosenIndex = spawnIndex;
@@ -82,6 +94,8 @@ io.on('connection', (socket) => {
     if (typeof color === 'string' && /^#?[0-9a-fA-F]{6}$/.test(color)) {
       players[socket.id].color = color.startsWith('#') ? color : `#${color}`;
     }
+    // update lastRespawn
+    players[socket.id].lastRespawn = now;
     // notify the respawning client of its new state
     socket.emit('player:joined:you', { id: socket.id, state: players[socket.id] });
     // notify others about the position change

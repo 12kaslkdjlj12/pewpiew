@@ -108,3 +108,12 @@ p { margin: 4px 0 0 0; font-size: 13px }
 #spawn-confirm-yes { background: #0a84ff; color: #fff }
 #spawn-confirm-no { background: #666; color: #fff }
 
+/* minimap tooltip */
+#minimap-tooltip { position: absolute; background: rgba(0,0,0,0.85); color: #fff; padding: 6px 8px; border-radius: 6px; pointer-events: none; z-index: 50; font-size: 12px }
+
+/* respawn cooldown bar */
+#respawn-cooldown { margin-top: 8px; display:flex; align-items:center; gap:8px }
+#respawn-cooldown .bar { width: 100px; height: 8px; background: rgba(0,0,0,0.15); border-radius: 6px; overflow: hidden }
+#respawn-cooldown .bar .fill { height:100%; width:0%; background: linear-gradient(90deg,#0a84ff,#00d4ff); transition: width 0.12s linear }
+#respawn-cooldown .text { font-size:12px; color:#333 }
+
