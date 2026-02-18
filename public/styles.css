@@ -99,3 +99,12 @@ p { margin: 4px 0 0 0; font-size: 13px }
 .legend-label { font-size:12px; color:#fff }
 .minimap-legend .hint { font-size:11px; color:#ddd; margin-top:6px }
 
+/* spawn confirm dialog */
+#spawn-confirm-ui { position: absolute; z-index: 60; pointer-events: auto; }
+.spawn-confirm-panel { background: rgba(0,0,0,0.85); color: #fff; padding: 8px 10px; border-radius: 8px; min-width: 160px }
+.spawn-confirm-text { margin-bottom: 8px }
+.spawn-confirm-actions { text-align: right }
+.spawn-confirm-actions button { margin-left: 6px; padding: 6px 8px; border-radius:6px; border: none }
+#spawn-confirm-yes { background: #0a84ff; color: #fff }
+#spawn-confirm-no { background: #666; color: #fff }
+

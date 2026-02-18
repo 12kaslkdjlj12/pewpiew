@@ -48,6 +48,40 @@
   // map data from server
   const mapData = { spawnPoints: [], objectives: [] };
 
+  // hover / confirm UI state for minimap
+  let hoveredSpawn = null;
+  const spawnConfirm = document.createElement('div');
+  spawnConfirm.id = 'spawn-confirm-ui';
+  spawnConfirm.style.display = 'none';
+  spawnConfirm.innerHTML = `
+    <div class="spawn-confirm-panel">
+      <div class="spawn-confirm-text"></div>
+      <div class="spawn-confirm-actions">
+        <button id="spawn-confirm-yes">Respawn</button>
+        <button id="spawn-confirm-no">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(spawnConfirm);
+
+  function showSpawnConfirm(idx) {
+    const s = mapData.spawnPoints[idx];
+    if (!s) return;
+    spawnConfirm.querySelector('.spawn-confirm-text').textContent = `Respawn at Spawn ${idx + 1}?`;
+    // position near minimap
+    const rect = minimap.getBoundingClientRect();
+    spawnConfirm.style.left = (rect.left - 10) + 'px';
+    spawnConfirm.style.top = (rect.bottom + 8) + 'px';
+    spawnConfirm.style.display = 'block';
+    spawnConfirm._pending = idx;
+  }
+  function hideSpawnConfirm() { spawnConfirm.style.display = 'none'; spawnConfirm._pending = null }
+  spawnConfirm.querySelector('#spawn-confirm-no').addEventListener('click', hideSpawnConfirm);
+  spawnConfirm.querySelector('#spawn-confirm-yes').addEventListener('click', () => {
+    const idx = spawnConfirm._pending;
+    if (idx != null && socket && socket.connected) socket.emit('player:respawn', { spawnIndex: idx });
+    hideSpawnConfirm();
+  });
+
   // minimap legend (shows colors & interactivity)
   const legend = document.createElement('div');
   legend.className = 'minimap-legend';
@@ -370,12 +404,26 @@
         if (d < bestDist) { bestDist = d; best = { s, idx }; }
       });
       if (best && bestDist < 4) {
-        // emit respawn to server with selected index
-        if (socket && socket.connected) {
-          socket.emit('player:respawn', { spawnIndex: best.idx });
-        }
+        // show confirmation dialog rather than immediate respawn
+        showSpawnConfirm(best.idx);
       }
     });
+
+    minimap.addEventListener('mousemove', (ev) => {
+      const rect = minimap.getBoundingClientRect();
+      const mx = ev.clientX - rect.left;
+      const my = ev.clientY - rect.top;
+      const w = minimapToWorld(mx, my);
+      // find nearest spawn within hover threshold
+      let best = null; let bestDist = 9999;
+      mapData.spawnPoints.forEach((s, idx) => {
+        const dx = s.x - w.x; const dz = s.z - w.z; const d = Math.sqrt(dx*dx + dz*dz);
+        if (d < bestDist) { bestDist = d; best = { s, idx }; }
+      });
+      if (best && bestDist < 4) hoveredSpawn = best.idx; else hoveredSpawn = null;
+    });
+
+    minimap.addEventListener('mouseleave', () => { hoveredSpawn = null; });
       // end animate loop actions
 
       // draw spawn points
@@ -383,13 +431,19 @@
         const px = (s.x - (cx - half)) * scale;
         const pz = (s.z - (cz - half)) * scale;
         if (px < 0 || px > size || pz < 0 || pz > size) return;
-        minimapCtx.fillStyle = '#00ff66';
+        // highlight if hovered
+        const isHover = hoveredSpawn === idx;
+        minimapCtx.fillStyle = isHover ? '#99ffbb' : '#00ff66';
         minimapCtx.beginPath();
-        minimapCtx.moveTo(px, pz - 6);
-        minimapCtx.lineTo(px - 6, pz + 6);
-        minimapCtx.lineTo(px + 6, pz + 6);
+        const sizeTri = isHover ? 9 : 6;
+        minimapCtx.moveTo(px, pz - sizeTri);
+        minimapCtx.lineTo(px - sizeTri, pz + sizeTri);
+        minimapCtx.lineTo(px + sizeTri, pz + sizeTri);
         minimapCtx.closePath();
         minimapCtx.fill();
+        if (isHover) {
+          minimapCtx.strokeStyle = 'rgba(0,0,0,0.5)'; minimapCtx.lineWidth = 2; minimapCtx.stroke();
+        }
         // small index label
         minimapCtx.fillStyle = 'rgba(0,0,0,0.7)';
         minimapCtx.font = '10px sans-serif';
