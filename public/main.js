@@ -28,6 +28,51 @@
   player.position.y = 0.5;
   scene.add(player);
 
+  // Networking
+  const socket = window.io ? window.io() : null;
+  const remotePlayers = {};
+
+  function createRemotePlayer(id, state) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x5555ff });
+    const mesh = new THREE.Mesh(geometry.clone(), mat);
+    mesh.position.set(state.position.x, state.position.y, state.position.z);
+    scene.add(mesh);
+    remotePlayers[id] = mesh;
+    return mesh;
+  }
+
+  if (socket) {
+    socket.on('connect', () => {
+      console.log('connected to server', socket.id);
+    });
+
+    socket.on('players:init', (all) => {
+      Object.keys(all).forEach((id) => {
+        if (id === socket.id) return;
+        createRemotePlayer(id, all[id]);
+      });
+    });
+
+    socket.on('player:joined', ({ id, state }) => {
+      if (id === socket.id) return;
+      createRemotePlayer(id, state);
+    });
+
+    socket.on('player:update', ({ id, position }) => {
+      if (id === socket.id) return;
+      const mesh = remotePlayers[id] || createRemotePlayer(id, { position });
+      mesh.position.set(position.x, position.y, position.z);
+    });
+
+    socket.on('player:remove', ({ id }) => {
+      const mesh = remotePlayers[id];
+      if (mesh) {
+        scene.remove(mesh);
+        delete remotePlayers[id];
+      }
+    });
+  }
+
   // Simple camera follow
   function updateCamera() {
     const offset = new THREE.Vector3(0, 5, 10);
@@ -61,8 +106,16 @@
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
 
+
     step(dt);
     updateCamera();
+
+    // send position updates at ~10Hz
+    if (socket && now % 100 < 16) {
+      socket.emit('player:update', { position: player.position });
+    }
+
+    // update remote players (interpolation could go here)
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
