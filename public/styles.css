@@ -93,3 +93,9 @@ p { margin: 4px 0 0 0; font-size: 13px }
   pointer-events: none;
 }
 
+.minimap-legend { pointer-events: auto; }
+.minimap-legend .legend-item { display:flex; gap:8px; align-items:center; margin:4px 0 }
+.legend-swatch { width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,0.3) }
+.legend-label { font-size:12px; color:#fff }
+.minimap-legend .hint { font-size:11px; color:#ddd; margin-top:6px }
+

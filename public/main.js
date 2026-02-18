@@ -48,6 +48,15 @@
   // map data from server
   const mapData = { spawnPoints: [], objectives: [] };
 
+  // minimap legend (shows colors & interactivity)
+  const legend = document.createElement('div');
+  legend.className = 'minimap-legend';
+  legend.innerHTML = `
+    <div class="legend-item"><div class="legend-swatch" style="background:#00ff66"></div><div class="legend-label">Spawn points</div></div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#ff4444"></div><div class="legend-label">Objectives</div></div>
+    <div class="hint">Click a spawn on the minimap to respawn there.</div>`;
+  document.body.appendChild(legend);
+
   function createLabel(text) {
     const el = document.createElement('div');
     el.className = 'player-label';
@@ -326,6 +335,48 @@
         minimapCtx.lineWidth = 2;
         minimapCtx.strokeRect(0, 0, size, size);
       }
+
+      // end animate loop actions
+
+
+    // Click-to-respawn: map canvas coordinate -> world coordinate -> nearest spawn
+    function minimapToWorld(mx, my) {
+      const size = Math.min(minimap.width, minimap.height);
+      const viewSize = 30;
+      const half = viewSize / 2;
+      const scale = size / viewSize;
+      const cx = player.position.x;
+      const cz = player.position.z;
+      // convert canvas coords to map-space (0..size)
+      const localX = mx;
+      const localY = my;
+      const worldX = (localX / scale) + (cx - half);
+      const worldZ = (localY / scale) + (cz - half);
+      return { x: worldX, z: worldZ };
+    }
+
+    minimap.addEventListener('click', (ev) => {
+      const rect = minimap.getBoundingClientRect();
+      const mx = ev.clientX - rect.left;
+      const my = ev.clientY - rect.top;
+      const w = minimapToWorld(mx, my);
+      // find closest spawn point within threshold (world units)
+      let best = null;
+      let bestDist = 9999;
+      mapData.spawnPoints.forEach((s, idx) => {
+        const dx = s.x - w.x;
+        const dz = s.z - w.z;
+        const d = Math.sqrt(dx*dx + dz*dz);
+        if (d < bestDist) { bestDist = d; best = { s, idx }; }
+      });
+      if (best && bestDist < 4) {
+        // emit respawn to server with selected index
+        if (socket && socket.connected) {
+          socket.emit('player:respawn', { spawnIndex: best.idx });
+        }
+      }
+    });
+      // end animate loop actions
 
       // draw spawn points
       mapData.spawnPoints.forEach((s, idx) => {
